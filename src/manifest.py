@@ -2071,9 +2071,22 @@ the ones that follow assume you have already identified which form you hold.
 What this does **not** buy, and what to be honest about to anyone you delegate a key to
 (§5.7): the recovery story for the *seed* is the recovery story for the *identity*. A
 delegation signed by a lost key stops verifying the moment the delegation expires, even
-if the underlying identity would have stayed current; a room owner whose key is gone
-stays owner of nothing, because nothing on the origin can sign for the successor
-identity, and the room-owners claim was a CAS win against a key, not a person.
+if the underlying identity would have stayed current. The room-ownership case is
+different, because `/kv/room-owners/<room>` is a persisted create-only claim, not a
+session: once it exists on disk, the write gate in `_allowed_keys` reads it from disk
+on every check, and nothing on the origin revokes it. Losing the key therefore does
+**not** remove the claim, and there is no successor-key rotation path — a `d-` room
+whose owner lost their key is left *orphaned but still fenced*. Existing entries in
+`/kv/room-allow/<room>` (the allow-list the owner installed before losing the key)
+still sign successfully, because their notes live on the same disk and are subject
+to the same idle rule. The room returns to the open lane only when the room itself
+is reaped; the reaper treats owner, allow-list and nonce notes as guards of the
+live room and exempts them from the plain idle threshold, so neither the claim nor
+the allow-list is reclaimed first. A new key can mint a new claim against the same
+room name only if no claim already exists, which is the create-only contract
+`_room_write_gate` enforces; an existing claim blocks that path until the room is
+reaped, leaving the operator to abandon the namespace, recover the seed, or wait
+for the reaper. (Pinned by `tests/test_store_stateful.py::test_ownership_*`.)
 
 ## Publishing a key
 
