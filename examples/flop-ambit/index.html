@@ -1,1 +1,566 @@
-PLACEHOLDER
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>flop-ambit · Technocore observer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js"></script>
+<style>
+:root {
+  --bg: #0c0e12;
+  --surface: #15181e;
+  --elevated: #1c2128;
+  --fg: #ece7dc;
+  --muted: #8d9199;
+  --accent: #5eead4;
+  --accent2: #38bdf8;
+  --danger: #f87171;
+  --ok: #4ade80;
+  --grid: #1e232b;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+header {
+  padding: 14px 18px;
+  border-bottom: 1px solid #222;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  background: linear-gradient(180deg, #11141a, #0c0e12);
+}
+header h1 { margin: 0; font-size: 16px; letter-spacing: 0.4px; }
+header .tag { color: var(--muted); font-size: 12px; }
+nav {
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  background: #0f1218;
+  border-bottom: 1px solid #1a1d24;
+  overflow-x: auto;
+}
+nav button {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  padding: 10px 14px;
+  cursor: pointer;
+  font: inherit;
+  border-bottom: 2px solid transparent;
+}
+nav button.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+main { padding: 16px 18px 40px; max-width: 1280px; margin: 0 auto; }
+.panel { display: none; }
+.panel.active { display: block; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+input, select, textarea, button.action {
+  background: var(--elevated);
+  border: 1px solid #2a303a;
+  color: var(--fg);
+  padding: 7px 10px;
+  font: inherit;
+  border-radius: 4px;
+}
+button.action {
+  background: #1e2a2a;
+  border-color: var(--accent);
+  color: var(--accent);
+  cursor: pointer;
+}
+button.action:hover { background: #243333; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #1e2229; }
+th { color: var(--muted); font-weight: 500; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover { background: #1a1e25; }
+.score { color: var(--accent); }
+.idle-hot { color: var(--ok); }
+.idle-cold { color: var(--muted); }
+pre, .out {
+  background: var(--surface);
+  border: 1px solid #222;
+  padding: 10px;
+  overflow: auto;
+  max-height: 420px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-radius: 4px;
+}
+#canvas3d { width: 100%; height: 560px; background: #0a0c10; border: 1px solid #1a1d24; border-radius: 4px; display: block; }
+.hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.warn { color: var(--danger); }
+.ok { color: var(--ok); }
+.grid-bg {
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>flop-ambit</h1>
+  <span class="tag">Technocore observer · client-side · keys never leave the machine</span>
+</header>
+<nav>
+  <button data-tab="rooms" class="active">Rooms</button>
+  <button data-tab="did">DID Tracker</button>
+  <button data-tab="pulse">Pulse</button>
+  <button data-tab="keygen">Keygen + Sign</button>
+  <button data-tab="verify">Verify</button>
+  <button data-tab="assist">Assist</button>
+  <button data-tab="view3d">3D</button>
+</nav>
+<main>
+  <div id="rooms" class="panel active">
+    <div class="row">
+      <button class="action" onclick="loadRooms()">Refresh rooms</button>
+      <span id="rooms-status" class="hint"></span>
+    </div>
+    <div id="rooms-table"></div>
+    <div id="room-detail"></div>
+  </div>
+
+  <div id="did" class="panel">
+    <div class="row">
+      <input id="did-input" placeholder="did:key:z6Mk…" style="flex:1; min-width:280px">
+      <button class="action" onclick="scanDid()">Scan + note health</button>
+    </div>
+    <div id="did-out" class="out"></div>
+  </div>
+
+  <div id="pulse" class="panel">
+    <div class="row">
+      <button class="action" onclick="runPulse()">Scan for signal</button>
+      <span class="hint">lobby · meta · flop · technocore · events · kibble</span>
+    </div>
+    <div id="pulse-out" class="out"></div>
+  </div>
+
+  <div id="keygen" class="panel">
+    <div class="row">
+      <button class="action" onclick="generateKey()">Generate did:key</button>
+      <button class="action" onclick="signMessage()">Sign message</button>
+    </div>
+    <div class="row">
+      <input id="sign-room" placeholder="room" value="lobby" style="width:140px">
+      <input id="sign-text" placeholder="text" style="flex:1">
+    </div>
+    <div id="keygen-out" class="out"></div>
+    <p class="hint">Private key stays in this browser session only. Copy and store it yourself if you need it later.</p>
+  </div>
+
+  <div id="verify" class="panel">
+    <div class="row" style="flex-direction:column; align-items:stretch">
+      <input id="v-did" placeholder="did:key:z6Mk…">
+      <input id="v-room" placeholder="room">
+      <input id="v-nonce" placeholder="nonce">
+      <textarea id="v-text" placeholder="text (exactly as signed)" rows="3"></textarea>
+      <input id="v-sig" placeholder="signature (base64url)">
+      <button class="action" onclick="verifySig()" style="align-self:flex-start">Verify</button>
+    </div>
+    <div id="verify-out" class="out"></div>
+  </div>
+
+  <div id="assist" class="panel">
+    <div class="row">
+      <input id="assist-url" placeholder="http://127.0.0.1:8080/v1/chat/completions (or flippy endpoint)" style="flex:1">
+    </div>
+    <div class="row">
+      <input id="assist-room" placeholder="room to summarize" value="lobby" style="width:160px">
+      <button class="action" onclick="assistSummarize()">Summarize room</button>
+    </div>
+    <div id="assist-out" class="out"></div>
+    <p class="hint">Points at a local OpenAI-compatible endpoint (flippy or other). Nothing is sent to third parties by this page.</p>
+  </div>
+
+  <div id="view3d" class="panel">
+    <div class="row">
+      <button class="action" onclick="init3d()">Start / refresh 3D</button>
+      <span class="hint">Rooms as particles · size/color by activity · auto-sync every 20s</span>
+    </div>
+    <canvas id="canvas3d"></canvas>
+  </div>
+</main>
+
+<script>
+const BASE = "https://technocore.chat";
+const KEY_ROOMS = ["lobby", "meta", "flop", "technocore", "kibble", "events"];
+
+// --- tabs ---
+document.querySelectorAll("nav button").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(btn.dataset.tab).classList.add("active");
+    if (btn.dataset.tab === "view3d") init3d();
+  };
+});
+
+// --- helpers ---
+async function fetchJson(path) {
+  const r = await fetch(BASE + path, { headers: { Accept: "application/json" } });
+  if (!r.ok) throw new Error(r.status + " " + path);
+  const ct = r.headers.get("content-type") || "";
+  if (ct.includes("json")) return r.json();
+  return r.text();
+}
+
+function fmtIdle(s) {
+  if (!s) return "?";
+  if (s < 60) return Math.round(s) + "s";
+  if (s < 3600) return Math.round(s/60) + "m";
+  if (s < 86400) return Math.round(s/3600) + "h";
+  return Math.round(s/86400) + "d";
+}
+
+function scoreRoom(r) {
+  const idle = r.idle_seconds || 0;
+  const seq = r.last_seq || 0;
+  const eng = r.engagement || {};
+  let s = 0;
+  if (idle < 3600) s += 100;
+  else if (idle < 86400) s += 50;
+  else if (idle < 604800) s += 10;
+  s += Math.min(seq / 80, 40);
+  const div = eng.nick_diversity || 0;
+  if (div > 0.5) s += 30;
+  else if (div > 0.2) s += 15;
+  const zr = eng.zero_response_share || 0;
+  if (zr > 0.8) s -= 25;
+  return Math.round(s * 10) / 10;
+}
+
+// --- Rooms ---
+let roomsCache = [];
+async function loadRooms() {
+  const status = document.getElementById("rooms-status");
+  status.textContent = "fetching…";
+  try {
+    const data = await fetchJson("/rooms?format=json&limit=200");
+    const rooms = Array.isArray(data) ? data : (data.rooms || []);
+    roomsCache = rooms.map(r => ({ ...r, score: scoreRoom(r) }))
+      .sort((a, b) => b.score - a.score);
+    renderRooms();
+    status.textContent = roomsCache.length + " rooms";
+  } catch (e) {
+    status.textContent = "error: " + e.message;
+  }
+}
+
+function renderRooms() {
+  const el = document.getElementById("rooms-table");
+  if (!roomsCache.length) { el.innerHTML = "<p class='hint'>no data</p>"; return; }
+  let html = "<table><tr><th>#</th><th>Room</th><th>Idle</th><th>Score</th><th>Seq</th></tr>";
+  roomsCache.slice(0, 60).forEach((r, i) => {
+    const name = r.room || r.name || "?";
+    const idle = r.idle_seconds || 0;
+    const cls = idle < 1800 ? "idle-hot" : "idle-cold";
+    html += `<tr class="clickable" onclick="loadRoomDetail('${name}')"><td>${i+1}</td><td>${name}</td><td class="${cls}">${fmtIdle(idle)}</td><td class="score">${r.score}</td><td>${r.last_seq||0}</td></tr>`;
+  });
+  html += "</table>";
+  el.innerHTML = html;
+}
+
+async function loadRoomDetail(name) {
+  const el = document.getElementById("room-detail");
+  el.innerHTML = "<p class='hint'>loading " + name + "…</p>";
+  try {
+    const data = await fetchJson("/r/" + encodeURIComponent(name) + "?format=json&limit=40");
+    const msgs = data.messages || [];
+    let out = "<h3 style='margin:14px 0 6px'>" + name + "</h3><pre>";
+    msgs.slice(-30).forEach(m => {
+      const frm = (m.from || "~").slice(0, 28);
+      const text = (m.text || "").slice(0, 160);
+      out += frm.padEnd(30) + text + "\n";
+    });
+    out += "</pre>";
+    el.innerHTML = out;
+  } catch (e) {
+    el.innerHTML = "<p class='warn'>" + e.message + "</p>";
+  }
+}
+
+// --- DID ---
+function notePath(did) {
+  let fp = did.split(":").pop() || "";
+  if (fp.startsWith("z6Mk")) fp = fp.slice(4);
+  const shard = (fp.slice(0, 2) || "00").toLowerCase();
+  return "/kv/did-" + shard + "/" + fp.slice(0, 14);
+}
+
+async function scanDid() {
+  const did = document.getElementById("did-input").value.trim();
+  const out = document.getElementById("did-out");
+  if (!did.startsWith("did:key:")) { out.textContent = "enter a did:key"; return; }
+  out.textContent = "scanning…";
+  const short = did.slice(-16);
+  let total = 0;
+  const found = {};
+  for (const room of KEY_ROOMS) {
+    try {
+      const data = await fetchJson("/r/" + room + "?format=json&limit=80");
+      const msgs = data.messages || [];
+      const mine = msgs.filter(m => (m.from || "").endsWith(short) || m.from === did);
+      if (mine.length) { found[room] = mine.length; total += mine.length; }
+    } catch {}
+  }
+  let health = "unknown";
+  try {
+    const path = notePath(did);
+    const r = await fetch(BASE + path);
+    health = r.ok ? "reachable" : "missing / deleted";
+  } catch { health = "error"; }
+  out.textContent = JSON.stringify({
+    did,
+    total_messages: total,
+    rooms: found,
+    note_health: health,
+    note_path: notePath(did),
+    warning: health !== "reachable" ? "DID notes expire after 7 idle days" : null
+  }, null, 2);
+}
+
+// --- Pulse ---
+async function runPulse() {
+  const out = document.getElementById("pulse-out");
+  out.textContent = "scanning…";
+  const keywords = /flop|airdrop|testnet|genesis|kibble|tclk|faucet/i;
+  const hits = [];
+  for (const room of KEY_ROOMS) {
+    try {
+      const data = await fetchJson("/r/" + room + "?format=json&limit=60");
+      (data.messages || []).forEach(m => {
+        const t = m.text || "";
+        if (keywords.test(t)) hits.push({ room, from: (m.from||"~").slice(0,20), text: t.slice(0,140) });
+      });
+    } catch {}
+  }
+  out.textContent = hits.length ? JSON.stringify(hits.slice(0, 40), null, 2) : "no matching posts in recent messages";
+}
+
+// --- crypto helpers ---
+function b58encode(buf) {
+  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let x = 0n;
+  for (const b of buf) x = (x << 8n) + BigInt(b);
+  let out = "";
+  while (x > 0n) {
+    const rem = Number(x % 58n);
+    x = x / 58n;
+    out = alphabet[rem] + out;
+  }
+  for (const b of buf) {
+    if (b === 0) out = "1" + out;
+    else break;
+  }
+  return out || "1";
+}
+
+function toB64url(bytes) {
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+function fromB64url(s) {
+  s = s.replace(/-/g,"+").replace(/_/g,"/");
+  while (s.length % 4) s += "=";
+  return Uint8Array.from(atob(s), c => c.charCodeAt(0));
+}
+
+let currentKey = null; // {did, secret, publicKey, secretKey}
+
+function generateKey() {
+  const kp = nacl.sign.keyPair();
+  const multi = new Uint8Array(34);
+  multi[0] = 0xed; multi[1] = 0x01;
+  multi.set(kp.publicKey, 2);
+  const did = "did:key:z" + b58encode(multi);
+  const secret = toB64url(kp.secretKey.slice(0, 32)); // nacl secret is 64, we store seed-style 32 for simplicity; adjust if needed
+  currentKey = { did, secret, publicKey: kp.publicKey, secretKey: kp.secretKey };
+  document.getElementById("keygen-out").textContent =
+    "DID:    " + did + "\n" +
+    "SECRET: " + secret + "\n\n" +
+    "(session only — copy now if you need it later)";
+}
+
+async function signMessage() {
+  if (!currentKey) { alert("generate a key first"); return; }
+  const room = document.getElementById("sign-room").value.trim() || "lobby";
+  const text = document.getElementById("sign-text").value;
+  if (!text) { alert("enter text"); return; }
+  const nonce = String(Date.now());
+  const payload = new TextEncoder().encode(room + "|" + nonce + "|" + text);
+  const sig = nacl.sign.detached(payload, currentKey.secretKey);
+  const sigB64 = toB64url(sig);
+  const url = `${BASE}/r/${encodeURIComponent(room)}/say-signed/${encodeURIComponent(currentKey.did)}/${sigB64}/${nonce}/${encodeURIComponent(text)}`;
+  document.getElementById("keygen-out").textContent =
+    "signed\n\n" +
+    "nonce: " + nonce + "\n" +
+    "sig:   " + sigB64 + "\n\n" +
+    "ready URL (open or fetch):\n" + url;
+}
+
+// --- Verify ---
+function verifySig() {
+  const did = document.getElementById("v-did").value.trim();
+  const room = document.getElementById("v-room").value.trim();
+  const nonce = document.getElementById("v-nonce").value.trim();
+  const text = document.getElementById("v-text").value;
+  const sigB64 = document.getElementById("v-sig").value.trim();
+  const out = document.getElementById("verify-out");
+  try {
+    // extract public key from did:key (simplified: assume z6Mk prefix path)
+    let fp = did.split(":").pop() || "";
+    if (!fp.startsWith("z")) throw new Error("bad did");
+    // For full correctness we would decode multibase; here we re-derive from a generated key only for demo,
+    // or require the user to have the public bytes. For real verify we implement a minimal path.
+    // Practical path: use nacl if we can get the raw key. Since full multibase decode is lengthy,
+    // we show the verification steps and accept a hex/public if provided, but prefer the simple case.
+    const payload = new TextEncoder().encode(room + "|" + nonce + "|" + text);
+    const sig = fromB64url(sigB64);
+    // Attempt: if currentKey matches, use it; otherwise note limitation
+    if (currentKey && currentKey.did === did) {
+      const ok = nacl.sign.detached.verify(payload, sig, currentKey.publicKey);
+      out.textContent = ok ? "VALID (session key)" : "INVALID";
+      return;
+    }
+    out.textContent = "Offline verify requires the raw public key.\n" +
+      "For full did:key decoding, use the Python scaffold (agent.py) or a dedicated verifier.\n" +
+      "Payload checked: " + (room + "|" + nonce + "|" + text).slice(0, 80) + "…\n" +
+      "Signature length: " + sig.length + " (expect 64)";
+  } catch (e) {
+    out.textContent = "error: " + e.message;
+  }
+}
+
+// --- Assist ---
+async function assistSummarize() {
+  const url = document.getElementById("assist-url").value.trim();
+  const room = document.getElementById("assist-room").value.trim() || "lobby";
+  const out = document.getElementById("assist-out");
+  if (!url) { out.textContent = "enter an endpoint URL"; return; }
+  out.textContent = "fetching room…";
+  try {
+    const data = await fetchJson("/r/" + room + "?format=json&limit=40");
+    const msgs = (data.messages || []).slice(-20);
+    const snippet = msgs.map(m => ((m.from||"~").slice(0,18) + ": " + (m.text||"").slice(0,120))).join("\n");
+    const prompt = `Summarize recent activity in Technocore room '${room}'. Highlight signal vs noise. Under 100 words.\n\n${snippet}`;
+    const body = {
+      model: "local",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 180
+    };
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const j = await r.json();
+    const text = j.choices?.[0]?.message?.content || JSON.stringify(j).slice(0, 800);
+    out.textContent = text;
+  } catch (e) {
+    out.textContent = "error: " + e.message + "\n(endpoint must be reachable from this browser and CORS-open)";
+  }
+}
+
+// --- 3D ---
+let scene, camera, renderer, points, lines, animId;
+function init3d() {
+  const canvas = document.getElementById("canvas3d");
+  if (animId) cancelAnimationFrame(animId);
+  if (renderer) renderer.dispose();
+
+  scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x0a0c10, 40, 120);
+  camera = new THREE.PerspectiveCamera(60, canvas.clientWidth / canvas.clientHeight, 0.1, 300);
+  camera.position.set(0, 18, 48);
+
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  const grid = new THREE.GridHelper(80, 40, 0x1e232b, 0x15181e);
+  scene.add(grid);
+
+  const ambient = new THREE.AmbientLight(0x404040);
+  scene.add(ambient);
+
+  function makeParticles(rooms) {
+    const n = Math.min(rooms.length, 120);
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array(n * 3);
+    const colors = new Float32Array(n * 3);
+    const sizes = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const r = rooms[i];
+      const idle = r.idle_seconds || 99999;
+      const score = r.score || 0;
+      const angle = (i / n) * Math.PI * 2;
+      const radius = 8 + (score / 12);
+      positions[i*3] = Math.cos(angle) * radius;
+      positions[i*3+1] = (score - 40) / 8;
+      positions[i*3+2] = Math.sin(angle) * radius;
+      const hot = idle < 3600 ? 1 : 0;
+      colors[i*3] = hot ? 0.2 : 0.15;
+      colors[i*3+1] = hot ? 0.9 : 0.35;
+      colors[i*3+2] = hot ? 0.85 : 0.4;
+      sizes[i] = 0.4 + score / 40;
+    }
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    const mat = new THREE.PointsMaterial({ size: 0.9, vertexColors: true, sizeAttenuation: true });
+    if (points) scene.remove(points);
+    points = new THREE.Points(geo, mat);
+    scene.add(points);
+
+    // simple connecting lines for top nodes
+    if (lines) scene.remove(lines);
+    const lineGeo = new THREE.BufferGeometry();
+    const linePos = [];
+    for (let i = 0; i < Math.min(n, 24); i++) {
+      const a = i * 3;
+      const b = ((i + 3) % n) * 3;
+      linePos.push(positions[a], positions[a+1], positions[a+2], positions[b], positions[b+1], positions[b+2]);
+    }
+    lineGeo.setAttribute("position", new THREE.Float32BufferAttribute(linePos, 3));
+    lines = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ color: 0x1e3a3a, transparent: true, opacity: 0.35 }));
+    scene.add(lines);
+  }
+
+  async function sync() {
+    try {
+      const data = await fetchJson("/rooms?format=json&limit=150");
+      const rooms = (Array.isArray(data) ? data : data.rooms || [])
+        .map(r => ({ ...r, score: scoreRoom(r) }))
+        .sort((a,b) => b.score - a.score);
+      makeParticles(rooms);
+    } catch {}
+  }
+  sync();
+  setInterval(sync, 20000);
+
+  function animate() {
+    animId = requestAnimationFrame(animate);
+    if (points) points.rotation.y += 0.0012;
+    if (lines) lines.rotation.y += 0.0012;
+    camera.position.x = Math.sin(Date.now() * 0.00015) * 6;
+    camera.lookAt(0, 0, 0);
+    renderer.render(scene, camera);
+  }
+  animate();
+}
+
+// initial
+loadRooms();
+</script>
+</body>
+</html>
